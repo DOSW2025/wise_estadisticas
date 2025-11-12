@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Usuario base
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  score         Score?
+  badges        BadgeAward[]
+  stats         UserStats?
+  tutorProfile  TutorProfile?
+  scoreReasons  ScoreReason[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+enum Role {
+  STUDENT
+  TUTOR
+  ADMIN
+}
+
+// Sistema de puntuación
+model Score {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  points    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reasons ScoreReason[]
+
+  @@map("scores")
+}
+
+model ScoreReason {
+  id        String   @id @default(uuid())
+  scoreId   String
+  userId    String
+  reason    String
+  amount    Int
+  date      DateTime @default(now())
+
+  score Score @relation(fields: [scoreId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("score_reasons")
+}
+
+// Sistema de insignias
+model Badge {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  iconUrl     String?
+  criteria    String // JSON con reglas
+  createdAt   DateTime @default(now())
+
+  awards BadgeAward[]
+
+  @@map("badges")
+}
+
+model BadgeAward {
+  id        String   @id @default(uuid())
+  userId    String
+  badgeId   String
+  awardedAt DateTime @default(now())
+  reason    String?
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+  @@map("badge_awards")
+}
+
+// Estadísticas personales
+model UserStats {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  totalStudyHours    Float    @default(0)
+  materialsUploaded  Int      @default(0)
+  avgLikes           Float    @default(0)
+  sessionsCompleted  Int      @default(0)
+  goalsCompleted     Int      @default(0)
+  lastUpdated        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_stats")
+}
+
+// Perfil de tutor (para ranking)
+model TutorProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  avgRating        Float    @default(0)
+  totalRatings     Int      @default(0)
+  responseTime     Int      @default(0) // en minutos
+  sessionsLastMonth Int     @default(0)
+  subjects         String[] // Array de materias
+  availabilityScore Float   @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tutor_profiles")
+}
+
+// Sistema de notificaciones
+model Notification {
+  id        String             @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  status    NotificationStatus @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  EMAIL
+  PUSH
+  SMS
+  WEBHOOK
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// Logs de auditoría
+model AuditLog {
+  id           String   @id @default(uuid())
+  action       String
+  userId       String?
+  resourceType String
+  resourceId   String?
+  metadata     Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  @@map("audit_logs")
+}
