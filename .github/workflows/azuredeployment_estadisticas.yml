@@ -6,6 +6,7 @@ name: Build and deploy Node.js app to Azure Web App - estadisticas
 on:
   push:
     branches:
+      - develop
       - AzureDeployment
   workflow_dispatch:
 
@@ -64,3 +65,4 @@ jobs:
           package: .
 
           
+
