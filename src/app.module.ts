@@ -6,6 +6,7 @@ import { RankingModule } from './ranking/ranking.module';
 import { AdminModule } from './admin/admin.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ReportsModule } from './reports/reports.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { ReportsModule } from './reports/reports.module';
       isGlobal: true,
     }),
     PrismaModule,
+    AuditModule,
     UsersModule,
     RankingModule,
     AdminModule,

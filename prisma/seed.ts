@@ -120,6 +120,123 @@ async function main() {
 
   console.log('[SEED] Sample users created successfully');
 
+  // Crear datos de ejemplo para auditoría
+  const admin = await prisma.user.findUnique({
+    where: { email: 'admin@wiswe.com' },
+  });
+
+  if (admin) {
+    await prisma.auditLog.create({
+      data: {
+        action: 'USER_CREATED',
+        userId: admin.id,
+        resourceType: 'User',
+        resourceId: admin.id,
+        metadata: {
+          email: admin.email,
+          name: admin.name,
+          role: admin.role,
+        },
+        ipAddress: '127.0.0.1',
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'BADGE_CREATED',
+        userId: admin.id,
+        resourceType: 'Badge',
+        resourceId: 'badge-sample',
+        metadata: {
+          name: 'Tutor Destacado',
+          description: 'Badge de ejemplo',
+        },
+        ipAddress: '127.0.0.1',
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'ADMIN_CREATED',
+        userId: admin.id,
+        resourceType: 'User',
+        resourceId: admin.id,
+        metadata: {
+          email: admin.email,
+          name: admin.name,
+        },
+        ipAddress: '127.0.0.1',
+      },
+    });
+
+    console.log('[SEED] Audit logs created successfully');
+  }
+
+  // Crear snapshots de reportes de ejemplo
+  const tutor1 = await prisma.user.findUnique({
+    where: { email: 'tutor1@example.com' },
+  });
+
+  if (tutor1) {
+    // Snapshot de sistema general
+    await prisma.reportSnapshot.create({
+      data: {
+        type: 'system_overview',
+        name: 'Snapshot Inicial - Sistema',
+        description: 'Estado inicial del sistema para pruebas',
+        data: {
+          users: { total: 4, tutors: 2, students: 1, admins: 1 },
+          badges: { total: 5, awarded: 0, avgPerUser: 0 },
+          notifications: { total: 0 },
+          points: { total: 0, avgPerUser: 0 },
+        },
+        createdBy: admin?.id,
+      },
+    });
+
+    // Snapshot de top usuarios
+    await prisma.reportSnapshot.create({
+      data: {
+        type: 'top_users',
+        name: 'Top 10 Usuarios - Inicial',
+        description: 'Ranking inicial de usuarios',
+        data: [
+          {
+            rank: 1,
+            userId: tutor1.id,
+            name: tutor1.name,
+            email: tutor1.email,
+            role: tutor1.role,
+            points: 0,
+          },
+        ],
+        createdBy: admin?.id,
+      },
+    });
+
+    // Snapshot de tutores
+    await prisma.reportSnapshot.create({
+      data: {
+        type: 'tutor_statistics',
+        name: 'Estadísticas Tutores - Inicial',
+        description: 'Estado inicial de tutores',
+        data: {
+          totalTutors: 2,
+          averages: {
+            rating: 4.5,
+            responseTime: 15,
+            sessionsLastMonth: 5,
+            availabilityScore: 0.8,
+          },
+          topTutors: [],
+        },
+        createdBy: admin?.id,
+      },
+    });
+
+    console.log('[SEED] Report snapshots created successfully');
+  }
+
   console.log('[SEED] Database seeding completed successfully');
 }
 

@@ -165,3 +165,17 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+// Snapshots de reportes
+model ReportSnapshot {
+  id          String   @id @default(uuid())
+  type        String
+  name        String?
+  description String?
+  data        Json
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@map("report_snapshots")
+}

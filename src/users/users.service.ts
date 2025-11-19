@@ -1,14 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // Crear usuario y su score inicial
   async create(createUserDto: CreateUserDto) {
-    return this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         ...createUserDto,
         score: {
@@ -23,6 +27,20 @@ export class UsersService {
         stats: true,
       },
     });
+
+    await this.auditService.log({
+      action: 'USER_CREATED',
+      userId: user.id,
+      resourceType: 'User',
+      resourceId: user.id,
+      metadata: {
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    });
+
+    return user;
   }
 
   // GET /users/:id/score - Ver puntaje y desglose
@@ -80,6 +98,18 @@ export class UsersService {
           orderBy: { date: 'desc' },
           take: 10,
         },
+      },
+    });
+
+    await this.auditService.log({
+      action: 'POINTS_ADDED',
+      userId,
+      resourceType: 'Score',
+      resourceId: score.id,
+      metadata: {
+        reason,
+        amount,
+        newTotal: updated.points,
       },
     });
 
@@ -147,7 +177,7 @@ export class UsersService {
       avgLikes?: number;
     },
   ) {
-    return this.prisma.userStats.update({
+    const stats = await this.prisma.userStats.update({
       where: { userId },
       data: {
         totalStudyHours: updates.studyHours
@@ -165,6 +195,16 @@ export class UsersService {
         avgLikes: updates.avgLikes ?? undefined,
       },
     });
+
+    await this.auditService.log({
+      action: 'STATS_UPDATED',
+      userId,
+      resourceType: 'UserStats',
+      resourceId: stats.id,
+      metadata: updates,
+    });
+
+    return stats;
   }
 
   // Buscar usuario por ID

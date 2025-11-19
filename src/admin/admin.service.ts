@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   /**
    * Crear nuevo administrador
@@ -34,6 +38,17 @@ export class AdminService {
       include: {
         score: true,
         stats: true,
+      },
+    });
+
+    await this.auditService.log({
+      action: 'ADMIN_CREATED',
+      userId: admin.id,
+      resourceType: 'User',
+      resourceId: admin.id,
+      metadata: {
+        email: admin.email,
+        name: admin.name,
       },
     });
 
@@ -124,6 +139,19 @@ export class AdminService {
       },
     });
 
+    await this.auditService.log({
+      action: 'BADGE_AWARDED',
+      userId,
+      resourceType: 'BadgeAward',
+      resourceId: award.id,
+      metadata: {
+        badgeId,
+        badgeName: badge.name,
+        reason,
+        userName: award.user.name,
+      },
+    });
+
     return award;
   }
 
@@ -136,9 +164,21 @@ export class AdminService {
     iconUrl?: string;
     criteria: string;
   }) {
-    return this.prisma.badge.create({
+    const badge = await this.prisma.badge.create({
       data,
     });
+
+    await this.auditService.log({
+      action: 'BADGE_CREATED',
+      resourceType: 'Badge',
+      resourceId: badge.id,
+      metadata: {
+        name: badge.name,
+        description: badge.description,
+      },
+    });
+
+    return badge;
   }
 
   /**
