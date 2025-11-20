@@ -1,11 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class StatsService {
   private readonly logger = new Logger(StatsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   /**
    * Resumen general de materiales
@@ -112,6 +116,35 @@ export class StatsService {
     } catch (err: any) {
       this.logger.warn('Error fetching top downloaded materials: ' + (err?.message || err));
       return [];
+    }
+  }
+
+  /**
+   * Incrementa el contador de descargas para un material y registra auditoría.
+   * Intenta actualizar la tabla `material_stats.total_downloads` y registra un log con AuditService.
+   */
+  async incrementMaterialDownload(materialId: string, userId?: string, ipAddress?: string) {
+    try {
+      // Intentamos incrementar en material_stats si existe
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE material_stats SET total_downloads = total_downloads + 1 WHERE material_id = $1`,
+        materialId,
+      );
+
+      // Registrar auditoría (no bloquear la operación si falla)
+      await this.auditService.log({
+        action: 'MATERIAL_DOWNLOADED',
+        userId: userId,
+        resourceType: 'MaterialStats',
+        resourceId: materialId,
+        metadata: { note: 'Incremented total_downloads' },
+        ipAddress,
+      });
+
+      return true;
+    } catch (err: any) {
+      this.logger.warn('Error incrementing material download: ' + (err?.message || err));
+      return false;
     }
   }
 }
