@@ -1,6 +1,6 @@
-import { Controller, Get, Query, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Query, Req, ForbiddenException, Param } from '@nestjs/common';
 import { AuditService } from './audit.service';
-import { ApiTags, ApiQuery, ApiOkResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
+import { ApiTags, ApiQuery, ApiOkResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiForbiddenResponse, ApiParam } from '@nestjs/swagger';
 
 @ApiTags('audit')
 @Controller('audit')
@@ -47,5 +47,31 @@ export class AuditController {
     if (offset) filters.offset = parseInt(offset, 10);
 
     return this.auditService.findAll(filters);
+  }
+
+  /**
+   * GET /audit/logs/:userId
+   * - Requiere rol ADMIN o el mismo usuario
+   * - Retorna logs ordenados por timestamp descendente
+   */
+  @Get('logs/:userId')
+  @ApiParam({ name: 'userId', description: 'ID del usuario cuyos logs se consultan' })
+  @ApiOkResponse({ description: '200 OK - Lista de logs del usuario' })
+  @ApiUnauthorizedResponse({ description: '401 Unauthorized - Autenticación requerida' })
+  @ApiForbiddenResponse({ description: '403 Forbidden - Se requiere rol admin o el mismo usuario' })
+  async getLogsByUser(@Param('userId') userId: string, @Req() req: any) {
+    const user = req.user;
+    if (!user) {
+      throw new ForbiddenException('Authentication required');
+    }
+
+    // Permitir si es ADMIN o si el user.id coincide con :userId
+    if (user.role !== 'ADMIN' && user.id !== userId) {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    // Limite por defecto a 100 registros para evitar respuestas enormes
+    const logs = await this.auditService.findByUser(userId, 100);
+    return { data: logs };
   }
 }
