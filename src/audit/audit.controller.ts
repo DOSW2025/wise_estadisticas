@@ -1,31 +1,46 @@
-import { Controller, Get, Param, Query, Delete } from '@nestjs/common';
+import { Controller, Get, Query, Req, ForbiddenException, Param } from '@nestjs/common';
 import { AuditService } from './audit.service';
+import { ApiTags, ApiQuery, ApiOkResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiForbiddenResponse, ApiParam } from '@nestjs/swagger';
 
+@ApiTags('audit')
 @Controller('audit')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   /**
-   * GET /audit - Obtener todos los logs con filtros
-   * Query params: userId, action, resourceType, resourceId, startDate, endDate, limit, offset
+   * GET /audit/logs
+   * - Requiere rol admin (chequeo simple en runtime)
+   * - Query: limit, offset, startDate, endDate, action
    */
-  @Get()
-  async findAll(
-    @Query('userId') userId?: string,
-    @Query('action') action?: string,
-    @Query('resourceType') resourceType?: string,
-    @Query('resourceId') resourceId?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
+  @Get('logs')
+  @ApiQuery({ name: 'limit', required: false, description: 'Número de resultados por página', example: 100 })
+  @ApiQuery({ name: 'offset', required: false, description: 'Offset para paginación', example: 0 })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Fecha de inicio (ISO)', example: '2025-01-01T00:00:00Z' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Fecha de fin (ISO)', example: '2025-12-31T23:59:59Z' })
+  @ApiQuery({ name: 'action', required: false, description: 'Filtro por tipo de acción (contains)', example: 'MATERIAL_DOWNLOADED' })
+  @ApiOkResponse({ description: '200 OK - Lista paginada de logs de auditoría' })
+  @ApiBadRequestResponse({ description: '400 Bad Request - Parámetros inválidos' })
+  @ApiUnauthorizedResponse({ description: '401 Unauthorized - Autenticación requerida' })
+  @ApiForbiddenResponse({ description: '403 Forbidden - Se requiere rol admin' })
+  async getLogs(
+    @Req() req: any,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('action') action?: string,
   ) {
-    const filters: any = {};
+    // Simple role check: requiere que req.user.role === 'ADMIN'
+    const user = req.user;
+    if (!user) {
+      throw new ForbiddenException('Authentication required');
+    }
+    if (user.role !== 'ADMIN' && user.role !== 'ADMINISTRATOR' && user.role !== 'Admin') {
+      throw new ForbiddenException('Admin role required');
+    }
 
-    if (userId) filters.userId = userId;
+    const filters: any = {};
     if (action) filters.action = action;
-    if (resourceType) filters.resourceType = resourceType;
-    if (resourceId) filters.resourceId = resourceId;
     if (startDate) filters.startDate = new Date(startDate);
     if (endDate) filters.endDate = new Date(endDate);
     if (limit) filters.limit = parseInt(limit, 10);
@@ -35,74 +50,28 @@ export class AuditController {
   }
 
   /**
-   * GET /audit/statistics - Obtener estadísticas de auditoría
+   * GET /audit/logs/:userId
+   * - Requiere rol ADMIN o el mismo usuario
+   * - Retorna logs ordenados por timestamp descendente
    */
-  @Get('statistics')
-  async getStatistics() {
-    return this.auditService.getStatistics();
-  }
-
-  /**
-   * GET /audit/user/:userId - Obtener logs de un usuario específico
-   */
-  @Get('user/:userId')
-  async findByUser(
-    @Param('userId') userId: string,
-    @Query('limit') limit?: string,
-  ) {
-    const limitNum = limit ? parseInt(limit, 10) : 50;
-    return this.auditService.findByUser(userId, limitNum);
-  }
-
-  /**
-   * GET /audit/resource/:resourceType - Obtener logs por tipo de recurso
-   */
-  @Get('resource/:resourceType')
-  async findByResourceType(
-    @Param('resourceType') resourceType: string,
-    @Query('limit') limit?: string,
-  ) {
-    const limitNum = limit ? parseInt(limit, 10) : 50;
-    return this.auditService.findByResourceType(resourceType, limitNum);
-  }
-
-  /**
-   * GET /audit/action/:action - Obtener logs por acción
-   */
-  @Get('action/:action')
-  async findByAction(
-    @Param('action') action: string,
-    @Query('limit') limit?: string,
-  ) {
-    const limitNum = limit ? parseInt(limit, 10) : 50;
-    return this.auditService.findByAction(action, limitNum);
-  }
-
-  /**
-   * GET /audit/:id - Obtener un log específico
-   */
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.auditService.findOne(id);
-  }
-
-  /**
-   * DELETE /audit/cleanup - Eliminar logs antiguos
-   * Query param: beforeDate (ISO string)
-   */
-  @Delete('cleanup')
-  async cleanup(@Query('beforeDate') beforeDate: string) {
-    if (!beforeDate) {
-      return { error: 'beforeDate query parameter is required' };
+  @Get('logs/:userId')
+  @ApiParam({ name: 'userId', description: 'ID del usuario cuyos logs se consultan' })
+  @ApiOkResponse({ description: '200 OK - Lista de logs del usuario' })
+  @ApiUnauthorizedResponse({ description: '401 Unauthorized - Autenticación requerida' })
+  @ApiForbiddenResponse({ description: '403 Forbidden - Se requiere rol admin o el mismo usuario' })
+  async getLogsByUser(@Param('userId') userId: string, @Req() req: any) {
+    const user = req.user;
+    if (!user) {
+      throw new ForbiddenException('Authentication required');
     }
 
-    const date = new Date(beforeDate);
-    const result = await this.auditService.deleteBefore(date);
+    // Permitir si es ADMIN o si el user.id coincide con :userId
+    if (user.role !== 'ADMIN' && user.id !== userId) {
+      throw new ForbiddenException('Forbidden');
+    }
 
-    return {
-      message: 'Logs eliminados exitosamente',
-      count: result.count,
-      beforeDate: date,
-    };
+    // Limite por defecto a 100 registros para evitar respuestas enormes
+    const logs = await this.auditService.findByUser(userId, 100);
+    return { data: logs };
   }
 }
